@@ -43,21 +43,21 @@ var isWebViewAvailable = cordova.platformId === 'windows';
 function attachNavigationEvents(element, callback) {
     if (isWebViewAvailable) {
         element.addEventListener("MSWebViewNavigationStarting", function (e) {
-            callback({ type: "loadstart", url: e.uri}, {keepCallback: true} );
+            callback({ type: "loadstart", url: e.uri }, { keepCallback: true });
         });
 
         element.addEventListener("MSWebViewNavigationCompleted", function (e) {
             if (e.isSuccess) {
                 callback({ type: "loadstop", url: e.uri }, { keepCallback: true });
             } else {
-                callback({ type: "loaderror", url: e.uri, code: e.webErrorStatus, message: "Navigation failed with error code " + e.webErrorStatus}, { keepCallback: true });
+                callback({ type: "loaderror", url: e.uri, code: e.webErrorStatus, message: "Navigation failed with error code " + e.webErrorStatus }, { keepCallback: true });
             }
         });
 
         element.addEventListener("MSWebViewUnviewableContentIdentified", function (e) {
             // WebView found the content to be not HTML.
             // http://msdn.microsoft.com/en-us/library/windows/apps/dn609716.aspx
-            callback({ type: "loaderror", url: e.uri, code: e.webErrorStatus, message: "Navigation failed with error code " + e.webErrorStatus}, { keepCallback: true });
+            callback({ type: "loaderror", url: e.uri, code: e.webErrorStatus, message: "Navigation failed with error code " + e.webErrorStatus }, { keepCallback: true });
         });
 
         element.addEventListener("MSWebViewContentLoading", function (e) {
@@ -77,15 +77,15 @@ function attachNavigationEvents(element, callback) {
         });
     } else {
         var onError = function () {
-            callback({ type: "loaderror", url: this.contentWindow.location}, {keepCallback: true});
+            callback({ type: "loaderror", url: this.contentWindow.location }, { keepCallback: true });
         };
 
         element.addEventListener("unload", function () {
-            callback({ type: "loadstart", url: this.contentWindow.location}, {keepCallback: true});
+            callback({ type: "loadstart", url: this.contentWindow.location }, { keepCallback: true });
         });
 
         element.addEventListener("load", function () {
-            callback({ type: "loadstop", url: this.contentWindow.location}, {keepCallback: true});
+            callback({ type: "loadstop", url: this.contentWindow.location }, { keepCallback: true });
         });
 
         element.addEventListener("error", onError);
@@ -273,7 +273,24 @@ var IAB = {
                 if (isWebViewAvailable) {
                     strUrl = strUrl.replace("ms-appx://", "ms-appx-web://");
                 }
-                popup.src = strUrl;
+
+                if (features.indexOf("clearcache=yes") > -1) {
+                    var siteUrl = new Windows.Foundation.Uri(strUrl);
+                    var httpRequestMessage = new Windows.Web.Http.HttpRequestMessage(Windows.Web.Http.HttpMethod.get, siteUrl);
+                    httpRequestMessage.headers.append("Cache-Control", "no-cache");
+                    httpRequestMessage.headers.append("Pragma", "no-cache");
+
+                    var filter = new Windows.Web.Http.Filters.HttpBaseProtocolFilter();
+                    var cookieCollection = filter.cookieManager.getCookies(siteUrl);
+
+                    for (var i = 0; i < cookieCollection.length; i++) {
+                        filter.cookieManager.deleteCookie(cookieCollection[i]);
+                    }
+
+                    popup.navigateWithHttpRequestMessage(httpRequestMessage);
+                } else {
+                    popup.src = strUrl;
+                }
             }
         });
     },
@@ -312,7 +329,7 @@ var IAB = {
                 Windows.Storage.StorageFile.getFileFromApplicationUriAsync(uri).done(function (file) {
                     Windows.Storage.FileIO.readTextAsync(file).done(function (code) {
                         var op = popup.invokeScriptAsync("eval", code);
-                        op.oncomplete = function(e) {
+                        op.oncomplete = function (e) {
                             if (hasCallback) {
                                 var result = [e.target.result];
                                 win(result);
@@ -358,14 +375,14 @@ var IAB = {
     }
 };
 
-function injectCSS (webView, cssCode, callback) {
+function injectCSS(webView, cssCode, callback) {
     // This will automatically escape all thing that we need (quotes, slashes, etc.)
     var escapedCode = JSON.stringify(cssCode);
     var evalWrapper = "(function(d){var c=d.createElement('style');c.innerHTML=%s;d.head.appendChild(c);})(document)"
         .replace('%s', escapedCode);
 
     var op = webView.invokeScriptAsync("eval", evalWrapper);
-    op.oncomplete = function() {
+    op.oncomplete = function () {
         if (callback) {
             callback([]);
         }
